@@ -5,6 +5,9 @@ import numpy as np
 import statsmodels.api as sm
 import seaborn as sns
 
+# Import economic inputs from config.py
+from config import nitrogen_price, grain_prices, variable_costs
+
 # ==========================
 # User Controls
 # ==========================
@@ -136,42 +139,6 @@ if GENERAL_GRAPHS:
 ## ---------------------------------
 ## A.2 Gross Margin Calculation
 ## ---------------------------------
-
-# Nitrogen price scenarios
-nitrogen_price = {
-    "Low": 1200 * 0.7,  # 30% decrease
-    "Standard": 1200,
-    "High": 1200 * 1.3  # 30% increase
-}
-
-# Grain price and quality standards
-grain_prices = {
-    "Wheat": {
-        "APW": {"Price": 375, "Protein Requirement": 10.5, "Max Screenings": 5},
-        "ASW": {"Price": 362, "Protein Requirement": 0, "Max Screenings": 5},
-        "Feed": {"Price": 335, "Protein Requirement": 0, "Max Screenings": None},
-    },
-    "Canola": {
-        "CAN1": {"Price": 750, "Protein Requirement": None, "Max Screenings": None},
-    },
-    "Barley": {
-        "Malt": {"Price": 341, "Protein Requirement": 9, "Max Screenings": 7},
-        "Feed": {"Price": 310, "Protein Requirement": 0, "Max Screenings": 60},
-    },
-    "Lupin": {
-        "Lup1": {"Price": 450, "Protein Requirement": None, "Max Screenings": None},
-    }
-}
-
-# Variable costs excluding nitrogen
-variable_costs = {
-    "Wheat": {"Other Fertiliser": 80.00, "Chem": 150.00, "Labour": 30.00, "Machinery": 60.00, "Total": 320.00},
-    "Barley": {"Other Fertiliser": 80.00, "Chem": 150.00, "Labour": 30.00, "Machinery": 60.00, "Total": 320.00},
-    "Oats": {"Other Fertiliser": 80.00, "Chem": 100.00, "Labour": 30.00, "Machinery": 60.00, "Total": 270.00},
-    "Canola": {"Other Fertiliser": 80.00, "Chem": 170.00, "Labour": 30.00, "Machinery": 60.00, "Total": 340.00},
-    "Lupin": {"Other Fertiliser": 80.00, "Chem": 150.00, "Labour": 30.00, "Machinery": 60.00, "Total": 320.00},
-}
-
 
 def select_grain_price(crop, protein, screenings):
     """Selects the appropriate grain price based on crop type, protein, and screenings."""
