@@ -9,7 +9,8 @@ This code base provides tools for **data visualisation, statistical analysis, an
 ## 📂 Project Structure
 
 - `DataMaster.xlsx` – Input dataset containing yearly crop data.
-- `script.py` – Main analysis script that:
+- `Config.py` – Input analysis assumptions and parameters.
+- `RiskWise.py` – Main analysis script that:
   - Reads and filters data for the selected year.
   - Generates key graphs for yield, protein, screenings, and NUE.
   - Computes gross margins based on nitrogen application and grain prices.
