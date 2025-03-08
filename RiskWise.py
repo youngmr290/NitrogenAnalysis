@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import statsmodels.api as sm
+# from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LinearRegression
 import seaborn as sns
 
 # Import economic inputs from config.py
@@ -570,79 +572,37 @@ plot_boxplots(
 ## ---------------------------------
 
 # Convert categorical variables to numeric codes for correlation analysis
-df['Spring rainfall decile'] = df['Spring rainfall decile'].map({'Poor': 0, 'Good': 1})
-df['GS rainfall decile'] = df['GS rainfall decile'].map({'Poor': 0, 'Good': 1})
-df['Previous Land Use'] = pd.Categorical(df['Previous Land Use']).codes
-df['Current Land Use'] = pd.Categorical(df['Current Land Use']).codes
+df['Time of break _dummy'] = df['Time of break'].map({'Late': 0, 'Medium': 1, 'Early': 2})
+df['Quality of break _dummy'] = df['Quality of break'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
+df['Spring rainfall decile _dummy'] = df['Spring rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
+df['GS rainfall decile _dummy'] = df['GS rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
+df['Previous Land Use _dummy'] = pd.Categorical(df['Previous Land Use']).codes
+df['Current Land Use _dummy'] = pd.Categorical(df['Current Land Use']).codes
 
 # Correlation matrix between numeric variables
-correlation_matrix = df[['N Rate (kg N/ha)', 'Yield (t/ha)', 'Protein (%)', 'Screenings (%)',
-                         'Spring rainfall decile', 'GS rainfall decile', 'Previous Land Use', 'Current Land Use']].corr()
+correlation_matrix = df[['N Rate (kg N/ha)', 'Yield (t/ha)', 'Time of break _dummy', 'Quality of break _dummy', 'Spring rainfall decile _dummy', 'GS rainfall decile _dummy', 'Previous Land Use _dummy', 'Current Land Use _dummy']].corr()
 
 print("Correlation Matrix:")
 print(correlation_matrix)
 
-# Visualizing the relationships between N Rate, Protein, and Screenings
-plt.figure(figsize=(12, 6))
-sns.pairplot(df[['N Rate (kg N/ha)', 'Protein (%)', 'Screenings (%)', 'Yield (t/ha)']])
-plt.suptitle('Pairplot of N Rate, Protein, Screenings, and Yield', y=1.02)
-plt.show()
-
 # Perform Linear Regression to predict Protein and Screenings from other variables
 # Predictor variables (independent)
-X = df[['N Rate (kg N/ha)', 'Yield (t/ha)', 'Spring rainfall decile', 'GS rainfall decile', 
-        'Previous Land Use', 'Current Land Use']]
+X = df[['N Rate (kg N/ha)', 'Time of break _dummy', 'Quality of break _dummy', 'Spring rainfall decile _dummy', 'GS rainfall decile _dummy', 'Previous Land Use _dummy', 'Current Land Use _dummy']]
 
 # Target variables (dependent)
-y_protein = df['Protein (%)']
-y_screenings = df['Screenings (%)']
+Y = df['Yield (t/ha)']
 
-# Fit linear regression model for Protein
-model_protein = LinearRegression()
-model_protein.fit(X, y_protein)
-protein_pred = model_protein.predict(X)
-
-# Fit linear regression model for Screenings
-model_screenings = LinearRegression()
-model_screenings.fit(X, y_screenings)
-screenings_pred = model_screenings.predict(X)
-
-# Print the coefficients for each feature
-print("Protein Model Coefficients:")
-print(model_protein.coef_)
-print("Screenings Model Coefficients:")
-print(model_screenings.coef_)
-
-# Summary of results
-summary = pd.DataFrame({
-    'Feature': ['N Rate (kg N/ha)', 'Yield (t/ha)', 'Spring rainfall decile', 'GS rainfall decile',
-                'Previous Land Use', 'Current Land Use'],
-    'Protein Coefficients': model_protein.coef_,
-    'Screenings Coefficients': model_screenings.coef_
-})
-print("\nSummary of Features and Coefficients:")
-print(summary)
-
-
-
-
-
-
-# Define independent variables (categorical variables must be treated as categorical)
-df_current_yr = pd.get_dummies(df_current_yr, columns=["Previous Land Use", "Current Land Use"], drop_first=True)
-
-# Define dependent variable (Yield) and independent variables
-X = df_current_yr[["N Rate (kg N/ha)"] + [col for col in df_current_yr.columns if "Previous Land Use" in col or "Current Land Use" in col]]
-y = df_current_yr["Yield (t/ha)"]
-
-# Add constant term for regression
+# Fit linear regression model for yield v2
 X = sm.add_constant(X)
-
-# Fit the model
-model = sm.OLS(y, X).fit()
-
-# Print results
+model = sm.OLS(Y, X).fit()
 print(model.summary())
+
+
+
+
+
+
+
 
 
 
