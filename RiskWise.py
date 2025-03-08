@@ -33,7 +33,7 @@ df = pd.read_excel(file_path)
 df_current_yr = df[df['Year'] == YEAR]
 
 # ==========================
-# Graphing Function
+# Graphing Functions
 # ==========================
 def f_plot_y_by_x_and_z(df, y="Yield (t/ha)", x="Previous Land Use", z=None):
     """
@@ -123,6 +123,42 @@ def f_plot_y_by_x_and_z(df, y="Yield (t/ha)", x="Previous Land Use", z=None):
     plt.show()
 
 
+# Define a reusable function for generating boxplots
+def plot_boxplots(data, crop, x_var, y_vars, hue_var):
+    """
+    Generates boxplots for a given crop, x-axis variable, multiple y-axis variables, and a hue variable.
+    
+    Parameters:
+        data (DataFrame): The dataset containing the required variables.
+        crop (str): The crop to filter (e.g., "Wheat" or "Barley").
+        x_var (str): The variable to use on the x-axis (e.g., "N Rate (kg N/ha)").
+        y_vars (list): A list of variables to plot on the y-axis (e.g., ["Screenings (%)", "Protein (%)"]). 
+        hue_var (str): The variable used for hue (e.g., "GS rainfall decile").
+    """
+    # Filter data for the specific crop
+    crop_data = data[data["Current Land Use"] == crop]
+
+    # Define figure with subplots (1 row, multiple columns based on the number of y_vars)
+    fig, axes = plt.subplots(1, len(y_vars), figsize=(6 * len(y_vars), 6))
+
+    # If only one y-variable is provided, convert axes to a list for consistent indexing
+    if len(y_vars) == 1:
+        axes = [axes]
+
+    # Loop through each y-variable and create boxplots
+    for i, y_var in enumerate(y_vars):
+        sns.boxplot(data=crop_data, x=x_var, y=y_var, hue=hue_var, ax=axes[i], palette=['#d3d3d3', '#a9a9a9', '#696969'])
+        axes[i].set_title(f"{y_var} vs. {x_var} ({crop})")
+        axes[i].set_xlabel(x_var)
+        axes[i].set_ylabel(y_var)
+        
+        # Remove the box around the graph (top and right spines)
+        axes[i].spines['top'].set_visible(False)
+        axes[i].spines['right'].set_visible(False)
+    # Adjust layout for readability
+    plt.tight_layout()
+    plt.show()
+
 # ==========================
 # PART A: Current Year Summary
 # ==========================
@@ -150,18 +186,34 @@ def select_grain_price(crop, protein, screenings):
                 return specs["Price"]
     return 0  # Default if no price found
 
+# Function to get the max possible grain price for each crop (Optimal Scenario)
+def get_max_grain_price(crop):
+    """Returns the maximum grain price available for a given crop."""
+    if crop in grain_prices:
+        return max(specs["Price"] for specs in grain_prices[crop].values())
+    return 0  # Default if no price found
+
 # Calculate gross margin
 def calculate_gross_margin(row, nitrogen_scenario="Standard"):
     crop = row["Current Land Use"]
-    grain_price = select_grain_price(crop, row["Protein (%)"], row["Screenings (%)"])
+    # Actual grain price based on quality specs
+    actual_grain_price = select_grain_price(crop, row["Protein (%)"], row["Screenings (%)"])
+    # Optimal grain price (best possible case)
+    max_grain_price = get_max_grain_price(crop)
+    # Calculate nitrogen cost
     nitrogen_cost = row["N Rate (kg N/ha)"] * (nitrogen_price[nitrogen_scenario] / 1000)  # Convert to $/ha
+    # Variable costs
     variable_cost = variable_costs[crop]["Total"]
-    revenue = row["Yield (t/ha)"] * grain_price
-    gross_margin = revenue - (nitrogen_cost + variable_cost)
-    return grain_price, gross_margin
+    # Revenue calculations
+    actual_revenue = row["Yield (t/ha)"] * actual_grain_price
+    max_revenue = row["Yield (t/ha)"] * max_grain_price
+    # Gross Margin calculations
+    actual_gross_margin = actual_revenue - (nitrogen_cost + variable_cost)
+    optimal_gross_margin = max_revenue - (nitrogen_cost + variable_cost)
+    return actual_grain_price, actual_gross_margin, optimal_gross_margin
 
 # Apply the function to each row and add new columns
-df[["Grain Price ($/t)", "Gross Margin ($/ha)"]] = df.apply(lambda row: pd.Series(calculate_gross_margin(row)), axis=1)
+df[["Grain Price ($/t)", "Gross Margin ($/ha)", "Optimal Gross Margin ($/ha)"]] = df.apply(lambda row: pd.Series(calculate_gross_margin(row)), axis=1)
 
 # create a pivot table - only show current yr
 df_current_yr = df[df['Year'] == YEAR] #update df_current to include the gm calcs
@@ -438,11 +490,83 @@ df_summary.to_excel("Output/emissions_summary.xlsx", index=False)
 
 
 # ==========================
-# PART B: All Years - Statistical Analysis
+# PART B: All Years 
 # ==========================
 
 ## ---------------------------------
-## B.1 Correlation Analysis
+## B.1 Fixed strategy
+## ---------------------------------
+
+
+# # Calc foregone profit
+# df['Foregone Profit ($/ha)'] = df['Optimal Gross Margin ($/ha)'] - df['Gross Margin ($/ha)']
+
+# # Extract the necessary columns
+# df_summary = df[['Rotation', 'Treatment', 'Gross Margin ($/ha)', 'Foregone Profit ($/ha)']]
+
+# Pivot the table to organize data by Rotation and Treatment
+pivot_table = df.pivot_table(index=['Rotation', 'Treatment'], 
+                                     columns='Year',
+                                     values=['Gross Margin ($/ha)'], 
+                                     aggfunc='mean').round(0)
+pivot_table_optimal = df.pivot_table(index=['Rotation', 'Treatment'], 
+                                     columns='Year',
+                                     values=['Optimal Gross Margin ($/ha)'], 
+                                     aggfunc='mean').round(0)
+
+
+# Calculate Average Gross Margin and Variation (Risk) for both actual and optimal tables
+pivot_table["Average Gross Margin ($/ha)"] = pivot_table.mean(axis=1)
+pivot_table["Variation (Risk)"] = pivot_table.std(axis=1)
+
+pivot_table_optimal["Average Gross Margin ($/ha)"] = pivot_table_optimal.mean(axis=1)
+pivot_table_optimal["Variation (Risk)"] = pivot_table_optimal.std(axis=1)
+
+# Align column names to ensure subtraction works correctly
+aligned_optimal = pivot_table_optimal.copy()
+aligned_optimal.columns = pivot_table.columns  # Rename optimal table columns to match actual table
+
+# Subtract actual from optimal to get the difference
+difference_table = aligned_optimal - pivot_table
+
+# Fill NaN values in difference_table with 0 (assuming missing values mean no difference)
+difference_table = difference_table.fillna(0)
+
+# Formatting: Add the difference in brackets to the actual pivot_table
+for col in pivot_table.columns:
+    if col in difference_table.columns:
+        pivot_table[col] = pivot_table[col].astype(str) + " (" + difference_table[col].astype(int).astype(str) + ")"
+
+
+# Reset index for better formatting
+# pivot_table.reset_index(inplace=True)
+pivot_table.to_excel("Output/GM.xlsx")
+
+
+# Filter dataset to only include Barley and Wheat
+filtered_data = df[df["Current Land Use"].isin(["Barley", "Wheat"])]
+
+# Use the function to generate boxplots for Barley
+plot_boxplots(
+    data=filtered_data, 
+    crop="Barley", 
+    x_var="N Rate (kg N/ha)", 
+    y_vars=["Screenings (%)", "Protein (%)"], 
+    hue_var="GS rainfall decile"
+)
+
+# Use the function to generate boxplots for Wheat
+plot_boxplots(
+    data=filtered_data, 
+    crop="Wheat", 
+    x_var="N Rate (kg N/ha)", 
+    y_vars=["Screenings (%)", "Protein (%)"], 
+    hue_var="GS rainfall decile"
+)
+
+
+## ---------------------------------
+## B.2 Statistical Analysis Analysis
 ## ---------------------------------
 
 # Convert categorical variables to numeric codes for correlation analysis
@@ -463,10 +587,6 @@ plt.figure(figsize=(12, 6))
 sns.pairplot(df[['N Rate (kg N/ha)', 'Protein (%)', 'Screenings (%)', 'Yield (t/ha)']])
 plt.suptitle('Pairplot of N Rate, Protein, Screenings, and Yield', y=1.02)
 plt.show()
-
-## ---------------------------------
-## B.2 Linear Regression Analysis
-## ---------------------------------
 
 # Perform Linear Regression to predict Protein and Screenings from other variables
 # Predictor variables (independent)
