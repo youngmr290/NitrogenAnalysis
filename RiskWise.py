@@ -3,9 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import statsmodels.api as sm
-# from sklearn.preprocessing import OneHotEncoder
-from sklearn.linear_model import LinearRegression
 import seaborn as sns
+from scipy.optimize import curve_fit
 
 # Import economic inputs from config.py
 from config import nitrogen_price, grain_prices, variable_costs, emission_coefficients, emission_farm_specific
@@ -160,6 +159,63 @@ def plot_boxplots(data, crop, x_var, y_vars, hue_var):
     # Adjust layout for readability
     plt.tight_layout()
     plt.show()
+    
+def plot_dynamic_line_graph(data, x_var, y_var, line_category, subplot_category, title_prefix="", mark_optimal=True):
+    """
+    Generic function to plot line graphs with subplots, marking optimal points if required.
+
+    Parameters:
+    - data (DataFrame): The dataset containing the required variables.
+    - x_var (str): The variable for the x-axis (e.g., "N Rate (kg N/ha)").
+    - y_var (str): The variable for the y-axis (e.g., "Gross Margin ($/ha)", "Yield (t/ha)").
+    - line_category (str): The variable that determines the different lines on each subplot (e.g., "N Price Scenario").
+    - subplot_category (str): The variable used to create subplots (e.g., "Crop", "Region").
+    - title_prefix (str, optional): A prefix to add to subplot titles for context.
+    - mark_optimal (bool, optional): Whether to mark the optimal GM (max y-value) for each line.
+    """
+    
+    unique_subplots = data[subplot_category].unique()
+    unique_lines = data[line_category].unique()
+    
+    # Dynamically generate a color palette based on the number of line categories
+    colors = sns.color_palette("Blues", len(unique_lines))  # Using a gradient blue color scheme
+
+    fig, axes = plt.subplots(len(unique_subplots), 1, figsize=(6, 4 * len(unique_subplots)), sharex=True)
+
+    if len(unique_subplots) == 1:
+        axes = [axes]
+
+    for ax, category in zip(axes, unique_subplots):
+        subset = data[data[subplot_category] == category]
+
+        # Iterate over unique line categories (e.g., N Price Scenarios)
+        for i, line_value in enumerate(unique_lines):
+            line_data = subset[subset[line_category] == line_value]
+
+            # Plot the line with dynamically assigned colors
+            sns.lineplot(data=line_data, x=x_var, y=y_var, label=line_value, ax=ax, color=colors[i])
+
+            if mark_optimal:
+                # Find the optimal N rate where GM is maximized
+                optimal_index = line_data[y_var].idxmax()
+                optimal_x = line_data.loc[optimal_index, x_var]
+                optimal_y = line_data.loc[optimal_index, y_var]
+
+                # Mark the optimal point
+                ax.scatter(optimal_x, optimal_y, color='red', zorder=3)
+                ax.text(optimal_x, optimal_y, f"{int(optimal_x)} {x_var}", verticalalignment="bottom", fontsize=10)
+
+        # Improve formatting for scientific reports
+        ax.set_title(f"{title_prefix} {category}", fontsize=12, fontweight="bold")
+        ax.set_xlabel(x_var, fontsize=11)
+        ax.set_ylabel(y_var, fontsize=11)
+        ax.legend(title=line_category, fontsize=10)
+        ax.spines['top'].set_visible(False)  # Remove top border
+        ax.spines['right'].set_visible(False)  # Remove right border
+        ax.grid(True, linestyle="--", alpha=0.6)  # Add subtle gridlines
+
+    plt.tight_layout()
+    plt.show()    
 
 # ==========================
 # PART A: Current Year Summary
@@ -549,22 +605,22 @@ pivot_table.to_excel("Output/GM.xlsx")
 filtered_data = df[df["Current Land Use"].isin(["Barley", "Wheat"])]
 
 # Use the function to generate boxplots for Barley
-plot_boxplots(
-    data=filtered_data, 
-    crop="Barley", 
-    x_var="N Rate (kg N/ha)", 
-    y_vars=["Screenings (%)", "Protein (%)"], 
-    hue_var="GS rainfall decile"
-)
+# plot_boxplots(
+#     data=filtered_data, 
+#     crop="Barley", 
+#     x_var="N Rate (kg N/ha)", 
+#     y_vars=["Screenings (%)", "Protein (%)"], 
+#     hue_var="GS rainfall decile"
+# )
 
 # Use the function to generate boxplots for Wheat
-plot_boxplots(
-    data=filtered_data, 
-    crop="Wheat", 
-    x_var="N Rate (kg N/ha)", 
-    y_vars=["Screenings (%)", "Protein (%)"], 
-    hue_var="GS rainfall decile"
-)
+# plot_boxplots(
+#     data=filtered_data, 
+#     crop="Wheat", 
+#     x_var="N Rate (kg N/ha)", 
+#     y_vars=["Screenings (%)", "Protein (%)"], 
+#     hue_var="GS rainfall decile"
+# )
 
 
 ## ---------------------------------
@@ -598,11 +654,140 @@ model = sm.OLS(Y, X).fit()
 print(model.summary())
 
 
+## ---------------------------------
+## B.3 Price SA
+## ---------------------------------
+
+
+
+# Define a quadratic yield response function
+def yield_response(n_rate, a, b, c):
+    return a + b * n_rate + c * n_rate**2
+
+# Function to calculate Gross Margin (GM)
+def calculate_gm(n_rates, a, b, c, grain_price, variable_cost, price_per_kg_n):
+    yield_pred = yield_response(n_rates, a, b, c)
+    return yield_pred * grain_price - (n_rates * (price_per_kg_n / 1000) + variable_cost)
+
+
+
+def compute_gm_and_profit_loss(crops, n_rates, scenario_dict, scenario_type):
+    profit_loss = []
+    plot_data = []
+
+    for crop in crops:
+        crop_data = df[df["Current Land Use"] == crop]
+        a, b, c = yield_models[crop]  # Get yield response function parameters
+        standard_grain_price = crop_data["Grain Price ($/t)"].mean()
+        variable_cost = variable_costs[crop]["Total"]
+
+        # Calculate GM for the standard price scenario
+        gm_standard_scenario = calculate_gm(n_rates, a, b, c, standard_grain_price, variable_cost, nitrogen_price["Standard"])
+        standard_n_rate = n_rates[np.argmax(gm_standard_scenario)]
+        standard_yield = yield_response(standard_n_rate, a, b, c)
+
+        for scenario, price in scenario_dict.items():
+            # Adjusted price handling based on scenario type
+            if scenario_type == "Grain Price Scenario":
+                grain_price = standard_grain_price * price  # Grain price adjustment (percentage change)
+                n_price = nitrogen_price["Standard"]  # Fixed standard nitrogen price
+                scenario_label = scenario_type
+            else:
+                grain_price = standard_grain_price  # Keep grain price unchanged
+                n_price = price  # Adjust nitrogen price
+                scenario_label = scenario_type
+
+            gm_optimal = calculate_gm(n_rates, a, b, c, grain_price, variable_cost, n_price)
+            optimal_n = n_rates[np.argmax(gm_optimal)]
+            max_gm = np.max(gm_optimal)
+            optimal_yield = yield_response(optimal_n, a, b, c)
+
+            # Compute GM at fixed N rate (standard N scenario)
+            gm_fixed_n = calculate_gm(standard_n_rate, a, b, c, grain_price, variable_cost, n_price)
+
+            # Calculate profit loss
+            loss = max_gm - gm_fixed_n
+
+            profit_loss.append({
+                "Crop": crop,
+                scenario_label: scenario,
+                "Optimal N Rate (kg N/ha)": round(optimal_n, 1),
+                "Fixed N Rate (kg N/ha)": round(standard_n_rate, 1),
+                "Optimal Yield (t/ha)": round(optimal_yield, 2),
+                "Yield at Fixed N (t/ha)": round(standard_yield, 2),
+                "Optimal GM ($/ha)": round(max_gm, 2),
+                "GM at Fixed N ($/ha)": round(gm_fixed_n, 2),
+                "Profit Loss ($/ha)": round(loss, 2)
+            })
+
+            # Store data for plotting
+            for i, n_rate in enumerate(n_rates):
+                plot_data.append({
+                    "Crop": crop,
+                    "N Rate (kg N/ha)": n_rate,
+                    "Gross Margin ($/ha)": gm_optimal[i],
+                    scenario_label: scenario
+                })
+
+    return pd.DataFrame(profit_loss), pd.DataFrame(plot_data)
+
+
+# Define crops and nitrogen rates
+crops = ["Barley", "Wheat", "Canola"]
+n_rates = np.linspace(0, max(df["N Rate (kg N/ha)"]), 100)
+standard_price = nitrogen_price["Standard"]
+yield_models = {}
+
+# Fit yield response function for each crop
+for crop in crops:
+    crop_data = df[df["Current Land Use"] == crop]
+    popt, _ = curve_fit(yield_response, crop_data["N Rate (kg N/ha)"], crop_data["Yield (t/ha)"])
+    yield_models[crop] = popt  # Store model parameters
+
+# Compute GM and Profit Loss for Nitrogen Price Scenarios
+profit_loss_df, plot_df = compute_gm_and_profit_loss(
+    crops,
+    n_rates,
+    nitrogen_price,
+    "N Price Scenario",
+)
+
+# Compute GM and Profit Loss for Grain Price Scenarios
+grain_price_scenarios = {"Standard": 1.0, "+20%": 1.2, "-20%": 0.8}
+profit_loss_grain_price_df, plot_df_grain_price = compute_gm_and_profit_loss(
+    crops,
+    n_rates,
+    grain_price_scenarios,
+    "Grain Price Scenario",
+)
+
+# Save results
+profit_loss_df.to_excel("Output/profit_loss_df.xlsx")
+profit_loss_grain_price_df.to_excel("Output/profit_loss_grain_price_df.xlsx")
+
+# Plot results
+plot_dynamic_line_graph(
+    data=plot_df,
+    x_var="N Rate (kg N/ha)",
+    y_var="Gross Margin ($/ha)",
+    line_category="N Price Scenario",
+    subplot_category="Crop",
+    title_prefix="GM Response for"
+)
+
+plot_dynamic_line_graph(
+    data=plot_df_grain_price,
+    x_var="N Rate (kg N/ha)",
+    y_var="Gross Margin ($/ha)",
+    line_category="Grain Price Scenario",
+    subplot_category="Crop",
+    title_prefix="GM Response to Grain Price Changes for"
+)
 
 
 
 
-
-
-
+## ---------------------------------
+## B.4 GHG SA
+## ---------------------------------
 
