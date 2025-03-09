@@ -5,9 +5,11 @@ import numpy as np
 import statsmodels.api as sm
 import seaborn as sns
 from scipy.optimize import curve_fit
+from scipy.stats import linregress
+from sklearn.metrics import mean_squared_error
 
 # Import economic inputs from config.py
-from config import nitrogen_price, grain_prices, variable_costs, emission_coefficients, emission_farm_specific
+from config import nitrogen_price, grain_prices, variable_costs, emission_coefficients, emission_farm_specific, carbon_price_scenarios
 
 # ==========================
 # User Controls
@@ -125,19 +127,28 @@ def f_plot_y_by_x_and_z(df, y="Yield (t/ha)", x="Previous Land Use", z=None):
 
 
 # Define a reusable function for generating boxplots
-def plot_boxplots(data, crop, x_var, y_vars, hue_var):
+def plot_boxplots(data, crop=None, x_var=None, y_vars=None, hue_var=None, x_order=None):
     """
-    Generates boxplots for a given crop, x-axis variable, multiple y-axis variables, and a hue variable.
+    Generates boxplots for a given x-axis variable, multiple y-axis variables, and a hue variable.
+    Allows optional filtering by crop and uses shades of grey for hue categories.
     
     Parameters:
         data (DataFrame): The dataset containing the required variables.
-        crop (str): The crop to filter (e.g., "Wheat" or "Barley").
+        crop (str, optional): The crop to filter (e.g., "Wheat" or "Barley"). If None, no filtering is applied.
         x_var (str): The variable to use on the x-axis (e.g., "N Rate (kg N/ha)").
         y_vars (list): A list of variables to plot on the y-axis (e.g., ["Screenings (%)", "Protein (%)"]). 
-        hue_var (str): The variable used for hue (e.g., "GS rainfall decile").
+        hue_var (str, optional): The variable used for hue (e.g., "GS rainfall decile").
+        x_order (list, optional): The desired order for x-axis categories (e.g., ["N", "L", "H"]). 
+                                  If None, the natural order of the data is used.
     """
-    # Filter data for the specific crop
-    crop_data = data[data["Current Land Use"] == crop]
+    # Apply crop filtering only if a crop is specified
+    if crop:
+        data = data[data["Current Land Use"] == crop]
+        
+    # Apply x-axis category ordering if specified
+    if x_order:
+        data[x_var] = pd.Categorical(data[x_var], categories=x_order, ordered=True)
+
 
     # Define figure with subplots (1 row, multiple columns based on the number of y_vars)
     fig, axes = plt.subplots(1, len(y_vars), figsize=(6 * len(y_vars), 6))
@@ -145,17 +156,25 @@ def plot_boxplots(data, crop, x_var, y_vars, hue_var):
     # If only one y-variable is provided, convert axes to a list for consistent indexing
     if len(y_vars) == 1:
         axes = [axes]
-
+        
+    # Generate a grey color palette dynamically based on the number of hue categories
+    if hue_var and hue_var in data.columns:
+        unique_hue_values = data[hue_var].nunique()
+        palette = sns.color_palette("Greys", unique_hue_values)  # Shades of grey
+    else:
+        palette = None  # Default seaborn colors
+        
     # Loop through each y-variable and create boxplots
     for i, y_var in enumerate(y_vars):
-        sns.boxplot(data=crop_data, x=x_var, y=y_var, hue=hue_var, ax=axes[i], palette=['#d3d3d3', '#a9a9a9', '#696969'])
-        axes[i].set_title(f"{y_var} vs. {x_var} ({crop})")
+        sns.boxplot(data=data, x=x_var, y=y_var, hue=hue_var, ax=axes[i], palette=palette)
+        axes[i].set_title(f"{y_var} vs. {x_var}" + (f" ({crop})" if crop else ""))
         axes[i].set_xlabel(x_var)
         axes[i].set_ylabel(y_var)
         
         # Remove the box around the graph (top and right spines)
         axes[i].spines['top'].set_visible(False)
         axes[i].spines['right'].set_visible(False)
+
     # Adjust layout for readability
     plt.tight_layout()
     plt.show()
@@ -217,22 +236,13 @@ def plot_dynamic_line_graph(data, x_var, y_var, line_category, subplot_category,
     plt.tight_layout()
     plt.show()    
 
+
 # ==========================
-# PART A: Current Year Summary
+# Set up calcs
 # ==========================
 
 ## ---------------------------------
-## A.1 General Graphs
-## ---------------------------------
-if GENERAL_GRAPHS:
-    f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Current Land Use", z=None)
-    f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Previous Land Use", z="Current Land Use")
-    f_plot_y_by_x_and_z(df_current_yr, y="Protein (%)", x="Previous Land Use", z="Current Land Use")
-    f_plot_y_by_x_and_z(df_current_yr, y="Screenings (%)", x="Previous Land Use", z="Current Land Use")
-    f_plot_y_by_x_and_z(df_current_yr, y="NUE (yield Nf)", x="Previous Land Use", z="Current Land Use")
-
-## ---------------------------------
-## A.2 Gross Margin Calculation
+## S.1 Gross Margin Calculation
 ## ---------------------------------
 
 def select_grain_price(crop, protein, screenings):
@@ -273,17 +283,8 @@ def calculate_gross_margin(row, nitrogen_scenario="Standard"):
 # Apply the function to each row and add new columns
 df[["Grain Price ($/t)", "Gross Margin ($/ha)", "Optimal Gross Margin ($/ha)"]] = df.apply(lambda row: pd.Series(calculate_gross_margin(row)), axis=1)
 
-# create a pivot table - only show current yr
-df_current_yr = df[df['Year'] == YEAR] #update df_current to include the gm calcs
-pivot_table = round(df_current_yr.pivot_table(index=["Rotation", "Current Land Use"], columns="Treatment", values="Gross Margin ($/ha)", aggfunc="mean"),0)
-print(pivot_table)
-
-# plot gm by n and rot
-# f_plot_y_by_x_and_z(df_current_yr, y="Gross Margin ($/ha)", x="Previous Land Use", z="Current Land Use")
-
-
 ## ---------------------------------
-## A.2 GHG Calculation
+## S.2 GHG Calculation
 ## ---------------------------------
 
 def f_n2o_leach_runoff(N, FracWET, FracLEACH):
@@ -523,8 +524,37 @@ df["co2e_total"] = (df["co2e_residue"] + df["co2e_fuel"] + df["co2e_fert"])
 
 df["emission_intensity"] = df["co2e_total"]/1000 / df["Yield (t/ha)"] #calc emission intensity
 
-#display a table for current yr
-df_current_yr = df[df['Year'] == YEAR]
+
+# ==========================
+# PART A: Current Year Summary
+# ==========================
+df_current_yr = df[df['Year'] == YEAR] #update df_current to include the gm calcs
+
+## ---------------------------------
+## A.1 General Graphs
+## ---------------------------------
+if GENERAL_GRAPHS:
+    f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Current Land Use", z=None)
+    f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Previous Land Use", z="Current Land Use")
+    f_plot_y_by_x_and_z(df_current_yr, y="Protein (%)", x="Previous Land Use", z="Current Land Use")
+    f_plot_y_by_x_and_z(df_current_yr, y="Screenings (%)", x="Previous Land Use", z="Current Land Use")
+    f_plot_y_by_x_and_z(df_current_yr, y="NUE (yield Nf)", x="Previous Land Use", z="Current Land Use")
+
+## ---------------------------------
+## A.2 GM results
+## ---------------------------------
+
+# create a pivot table - only show current yr
+pivot_table = round(df_current_yr.pivot_table(index=["Rotation", "Current Land Use"], columns="Treatment", values="Gross Margin ($/ha)", aggfunc="mean"),0)
+print(pivot_table)
+
+# plot gm by n and rot
+# f_plot_y_by_x_and_z(df_current_yr, y="Gross Margin ($/ha)", x="Previous Land Use", z="Current Land Use")
+
+## ---------------------------------
+## A.3 GHG results
+## ---------------------------------
+
 # Pivot table to summarize emissions by Rotation and Crop for each Treatment
 df_summary = df_current_yr.pivot_table(index=["Rotation", "Current Land Use"], 
                             columns="Treatment", 
@@ -547,20 +577,140 @@ print(df_summary)
 df_summary.to_excel("Output/emissions_summary.xlsx", index=False)
 
 
+# ---------------------------------
+# Part B Stats and quadratic fit 
+# ---------------------------------
+
+## ---------------------------------
+## B.1 Statistical Analysis - examin statistical relationships between variables
+## ---------------------------------
+
+# Convert categorical variables to numeric codes for correlation analysis
+df['Time of break _dummy'] = df['Time of break'].map({'Late': 0, 'Medium': 1, 'Early': 2})
+df['Quality of break _dummy'] = df['Quality of break'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
+df['Spring rainfall decile _dummy'] = df['Spring rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
+df['GS rainfall decile _dummy'] = df['GS rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
+df['Previous Land Use _dummy'] = pd.Categorical(df['Previous Land Use']).codes
+df['Current Land Use _dummy'] = pd.Categorical(df['Current Land Use']).codes
+
+# Correlation matrix between numeric variables
+correlation_matrix = df[['N Rate (kg N/ha)', 'Yield (t/ha)', 'Time of break _dummy', 'Quality of break _dummy', 'Spring rainfall decile _dummy', 'GS rainfall decile _dummy', 'Previous Land Use _dummy', 'Current Land Use _dummy']].corr()
+
+print("Correlation Matrix:")
+print(correlation_matrix)
+
+# Perform Linear Regression to predict Protein and Screenings from other variables
+# Predictor variables (independent)
+X = df[['N Rate (kg N/ha)', 'Time of break _dummy', 'Quality of break _dummy', 'Spring rainfall decile _dummy', 'GS rainfall decile _dummy', 'Previous Land Use _dummy', 'Current Land Use _dummy']]
+
+# Target variables (dependent)
+Y = df['Yield (t/ha)']
+
+# Fit linear regression model for yield v2
+X = sm.add_constant(X)
+model = sm.OLS(Y, X).fit()
+print(model.summary())
+
+
+## ---------------------------------
+## B.2 model fit - examine how models can be used to explain yield based on N rate
+## ---------------------------------
+
+# Define quadratic yield response function
+def yield_response(n_rate, a, b, c):
+    return a + b * n_rate + c * n_rate**2
+
+# Generalized function to fit yield response model based on dynamic filters
+def fit_yield_models(df, filter_conditions, plot=False):
+    """
+    Fits quadratic yield response models based on dynamic filtering conditions.
+
+    Parameters:
+        df (pd.DataFrame): The dataset containing yield and nitrogen rate data.
+        filter_conditions (dict): Dictionary where keys are column names and values are filter criteria.
+
+    Returns:
+        list: A list of fitted model parameters for selected subset of data.
+        
+    Example usage: Filtering based on multiple conditions
+    example_conditions = {
+        "Current Land Use": "Wheat",
+        "GS rainfall decile": "High",
+        "3 Previous Land Use": "Canola"
+    }
+
+    model_results = fit_yield_models(df, example_conditions)
+    """
+    # Apply filtering based on conditions
+    filtered_df = df.copy()
+    for col, value in filter_conditions.items():
+        filtered_df = filtered_df[filtered_df[col] == value]
+
+    # Ensure there is enough data to fit the model
+    if filtered_df.shape[0] < 3:
+        return "Not enough data points to fit the model."
+
+    # Extract independent and dependent variables
+    x_data = filtered_df["N Rate (kg N/ha)"]
+    y_data = filtered_df["Yield (t/ha)"]
+
+    # Fit the quadratic model
+    try:
+        popt, _ = curve_fit(yield_response, x_data, y_data)
+        
+        # Calculate predicted values
+        y_pred = yield_response(x_data, *popt)
+
+        # Compute R-squared
+        ss_res = np.sum((y_data - y_pred) ** 2)
+        ss_tot = np.sum((y_data - np.mean(y_data)) ** 2)
+        r_squared = 1 - (ss_res / ss_tot)
+        
+        # If plot flag is True, generate the graph
+        if plot:
+            plt.figure(figsize=(8, 6))
+            
+            # Scatter plot of raw data points
+            plt.scatter(x_data, y_data, color='gray', alpha=0.5, label="Raw Data")
+            
+            # Generate smooth x values for plotting
+            x_fit = np.linspace(x_data.min(), x_data.max(), 100)
+            y_fit = yield_response(x_fit, *popt)
+            
+            # Plot fitted quadratic curve
+            plt.plot(x_fit, y_fit, color='black', linestyle="--", label=f"Fitted Quadratic (R²={r_squared:.2f})")
+            
+            # Formatting
+            plt.xlabel("N Rate (kg N/ha)")
+            plt.ylabel("Yield (t/ha)")
+            plt.title("Quadratic Yield Response Fit")
+            plt.legend()
+            plt.grid(True, linestyle="--", alpha=0.6)
+            
+            # Remove top and right borders
+            ax = plt.gca()
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+    
+            plt.show()
+        return popt
+    except Exception as e:
+        return f"Error fitting model: {e}"
+
+
+# Fit and graph yield response function for each crop
+for crop in ["Barley", "Wheat", "Canola"]:
+    fit_yield_models(df, {"Current Land Use": crop}, plot=True)  # Plot each crop's model
+
+
+
 # ==========================
-# PART B: All Years 
+# PART C: All Years 
 # ==========================
 
 ## ---------------------------------
-## B.1 Fixed strategy
+## C.1 Fixed N strategy
 ## ---------------------------------
-
-
-# # Calc foregone profit
-# df['Foregone Profit ($/ha)'] = df['Optimal Gross Margin ($/ha)'] - df['Gross Margin ($/ha)']
-
-# # Extract the necessary columns
-# df_summary = df[['Rotation', 'Treatment', 'Gross Margin ($/ha)', 'Foregone Profit ($/ha)']]
 
 # Pivot the table to organize data by Rotation and Treatment
 pivot_table = df.pivot_table(index=['Rotation', 'Treatment'], 
@@ -623,52 +773,94 @@ filtered_data = df[df["Current Land Use"].isin(["Barley", "Wheat"])]
 # )
 
 
-## ---------------------------------
-## B.2 Statistical Analysis Analysis
-## ---------------------------------
-
-# Convert categorical variables to numeric codes for correlation analysis
-df['Time of break _dummy'] = df['Time of break'].map({'Late': 0, 'Medium': 1, 'Early': 2})
-df['Quality of break _dummy'] = df['Quality of break'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
-df['Spring rainfall decile _dummy'] = df['Spring rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
-df['GS rainfall decile _dummy'] = df['GS rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
-df['Previous Land Use _dummy'] = pd.Categorical(df['Previous Land Use']).codes
-df['Current Land Use _dummy'] = pd.Categorical(df['Current Land Use']).codes
-
-# Correlation matrix between numeric variables
-correlation_matrix = df[['N Rate (kg N/ha)', 'Yield (t/ha)', 'Time of break _dummy', 'Quality of break _dummy', 'Spring rainfall decile _dummy', 'GS rainfall decile _dummy', 'Previous Land Use _dummy', 'Current Land Use _dummy']].corr()
-
-print("Correlation Matrix:")
-print(correlation_matrix)
-
-# Perform Linear Regression to predict Protein and Screenings from other variables
-# Predictor variables (independent)
-X = df[['N Rate (kg N/ha)', 'Time of break _dummy', 'Quality of break _dummy', 'Spring rainfall decile _dummy', 'GS rainfall decile _dummy', 'Previous Land Use _dummy', 'Current Land Use _dummy']]
-
-# Target variables (dependent)
-Y = df['Yield (t/ha)']
-
-# Fit linear regression model for yield v2
-X = sm.add_constant(X)
-model = sm.OLS(Y, X).fit()
-print(model.summary())
-
 
 ## ---------------------------------
-## B.3 Price SA
+## C.2 Dynamic Strategy 
 ## ---------------------------------
 
 
 
-# Define a quadratic yield response function
-def yield_response(n_rate, a, b, c):
-    return a + b * n_rate + c * n_rate**2
+# todo - this doesnt work but it can be fixed to generate a flexible html with dropdowns
+# import numpy as np
+# import pandas as pd
+# import plotly.express as px
+# import plotly.graph_objects as go
+# from sklearn.preprocessing import PolynomialFeatures
+# from sklearn.linear_model import LinearRegression
+# from sklearn.metrics import r2_score
+# import plotly.io as pio
+
+# # Function to fit a quadratic model
+# def fit_quadratic_model(data, x_col, y_col):
+#     x_data = data[x_col].values.reshape(-1, 1)
+#     y_data = data[y_col].values
+    
+#     if len(x_data) < 3:
+#         return None, None, None  # Not enough data to fit
+    
+#     poly = PolynomialFeatures(degree=2)
+#     x_poly = poly.fit_transform(x_data)
+#     model = LinearRegression()
+#     model.fit(x_poly, y_data)
+    
+#     x_range = np.linspace(x_data.min(), x_data.max(), 100).reshape(-1, 1)
+#     y_pred = model.predict(poly.transform(x_range))
+#     r2 = r2_score(y_data, model.predict(x_poly))
+    
+#     return x_range.flatten(), y_pred, r2
+
+# # Function to generate an interactive HTML with dropdowns
+# def save_interactive_dropdown_html(data, x_col, y_col, filename="yield_response_dropdown.html"):
+#     crop_options = data["Current Land Use"].dropna().unique()
+#     prev_land_options = data["Previous Land Use"].dropna().unique()
+#     gs_rainfall_options = data["GS rainfall decile"].dropna().unique()
+
+#     fig = go.Figure()
+#     fig.update_layout(
+#         title="Select Crop, Previous Land Use, and GS Rainfall",
+#         xaxis_title="N Rate (kg N/ha)",
+#         yaxis_title="Yield (t/ha)",
+#         template="plotly_white",
+#         updatemenus=[
+#             {
+#                 "buttons": [
+#                     {"label": crop, "method": "update", "args": [{"visible": [crop == c for c in crop_options]}]} for crop in crop_options
+#                 ],
+#                 "direction": "down",
+#                 "showactive": True,
+#                 "x": 0.1,
+#                 "xanchor": "left",
+#                 "y": 1.2,
+#                 "yanchor": "top"
+#             }
+#         ]
+#     )
+
+#     for crop in crop_options:
+#         subset = data[data["Current Land Use"] == crop].dropna(subset=[x_col, y_col])
+#         if subset.shape[0] >= 3:
+#             x_range, y_pred, r2 = fit_quadratic_model(subset, x_col, y_col)
+#             fig.add_trace(go.Scatter(x=subset[x_col], y=subset[y_col], mode="markers", name=f"{crop} Data", marker=dict(size=6)))
+#             fig.add_trace(go.Scatter(x=x_range, y=y_pred, mode="lines", name=f"{crop} Fit (R²={r2:.3f})", line=dict(dash="dash")))
+    
+#     # Save interactive HTML
+#     pio.write_html(fig, file=filename, auto_open=False)
+#     print(f"Interactive dropdown HTML saved as {filename}")
+
+# # Example usage (Replace with actual dataset and columns)
+# # save_interactive_dropdown_html(df_ghg, "N Rate (kg N/ha)", "Yield (t/ha)")
+
+
+
+
+## ---------------------------------
+## C.3 Price SA
+## ---------------------------------
 
 # Function to calculate Gross Margin (GM)
-def calculate_gm(n_rates, a, b, c, grain_price, variable_cost, price_per_kg_n):
+def calculate_gm(n_rates, a, b, c, grain_price, variable_cost, price_per_kg_n, co2e_total=0, carbon_price=0):
     yield_pred = yield_response(n_rates, a, b, c)
-    return yield_pred * grain_price - (n_rates * (price_per_kg_n / 1000) + variable_cost)
-
+    return yield_pred * grain_price - (n_rates * (price_per_kg_n / 1000) + variable_cost + co2e_total * carbon_price)
 
 
 def compute_gm_and_profit_loss(crops, n_rates, scenario_dict, scenario_type):
@@ -735,15 +927,12 @@ def compute_gm_and_profit_loss(crops, n_rates, scenario_dict, scenario_type):
 # Define crops and nitrogen rates
 crops = ["Barley", "Wheat", "Canola"]
 n_rates = np.linspace(0, max(df["N Rate (kg N/ha)"]), 100)
-standard_price = nitrogen_price["Standard"]
 yield_models = {}
 
 # Fit yield response function for each crop
 for crop in crops:
-    crop_data = df[df["Current Land Use"] == crop]
-    popt, _ = curve_fit(yield_response, crop_data["N Rate (kg N/ha)"], crop_data["Yield (t/ha)"])
-    yield_models[crop] = popt  # Store model parameters
-
+    yield_models[crop] = fit_yield_models(df, {"Current Land Use": crop})  # Store model parameters
+    
 # Compute GM and Profit Loss for Nitrogen Price Scenarios
 profit_loss_df, plot_df = compute_gm_and_profit_loss(
     crops,
@@ -785,9 +974,102 @@ plot_dynamic_line_graph(
 )
 
 
+## ---------------------------------
+## C.4 GHG SA
+## ---------------------------------
+
+# Pivot the data to get total emissions per treatment and rotation for each year
+pivot_table_co2e_total = df.pivot_table(index=['Rotation', 'Treatment'], 
+                                     columns='Year',
+                                     values=["co2e_total"], 
+                                     aggfunc='mean')
+pivot_table_emission_intensity = df.pivot_table(index=['Rotation', 'Treatment'], 
+                                     columns='Year',
+                                     values=['emission_intensity'], 
+                                     aggfunc='mean')
+
+# Calculate Average 
+pivot_table_co2e_total["Average"] = pivot_table_co2e_total.mean(axis=1)
+pivot_table_emission_intensity["Average"] = pivot_table_emission_intensity.mean(axis=1)
+pivot_table_co2e_total = pivot_table_co2e_total.round(0)
+pivot_table_emission_intensity = pivot_table_emission_intensity.round(2)
+
+# Align column names to ensure next step works correctly
+pivot_table_emission_intensity.columns = pivot_table_co2e_total.columns  # Rename optimal table columns to match actual table
 
 
-## ---------------------------------
-## B.4 GHG SA
-## ---------------------------------
+# Formatting: Add the difference in brackets to the actual pivot_table
+for col in pivot_table_co2e_total.columns:
+    pivot_table_co2e_total[col] = pivot_table_co2e_total[col].astype(str) + " (" + pivot_table_emission_intensity[col].astype(str) + ")"
+
+pivot_table_co2e_total.to_excel("Output/emissions_table.xlsx")
+
+
+# Use the function to generate boxplots for GHG
+plot_boxplots(data=df, x_var="Treatment", y_vars=["co2e_total"], hue_var="Current Land Use", x_order=["N", "L", "H"])
+
+
+
+# Define crops and nitrogen rates
+crops = ["Barley", "Wheat", "Canola"]
+n_rates = np.linspace(0, max(df["N Rate (kg N/ha)"]), 100)
+yield_models = {}
+
+
+plot_data_ghg = []
+
+for crop in crops:
+    # Fit yield response function for each crop
+    a, b, c = fit_yield_models(df, {"Current Land Use": crop})  # get model parameters
+    crop_data = df[df["Current Land Use"] == crop]
+    standard_grain_price = crop_data["Grain Price ($/t)"].mean()
+    variable_cost = variable_costs[crop]["Total"]
+
+    
+    # calc yield
+    pred_yield = yield_response(n_rates, a, b, c)
+    
+    # calc GHG 
+    # all the nitrgen is urea except the nitrogen from MacroPro which is ammonium.
+    propn_urea = (n_rates - emission_farm_specific["N_MacroPro"])/ n_rates
+
+    # calculate residue left after harvest
+    total_biomass = pred_yield / emission_farm_specific["harvest_index"][crop]
+    residue = (total_biomass - pred_yield)* 1000  # Convert to kg/ha
+
+    co2e_residue = f_crop_residue_n2o_nir(crop, residue, emission_farm_specific["F"], emission_farm_specific["decay_before_burning"])
+    co2e_fuel = f_fuel_emissions(emission_farm_specific["diesel_used"])
+    co2e_fert = f_fert_emissions(n_rates, propn_urea, emission_farm_specific["lime_applied"])
+    co2e_total = (co2e_residue + co2e_fuel + co2e_fert)/1000  #convert to t/ha
+
+    
+    for scenario, carbon_price in carbon_price_scenarios.items():
+        gm = calculate_gm(n_rates, a, b, c, standard_grain_price, variable_cost, nitrogen_price["Standard"], co2e_total, carbon_price)
+    
+        # Store data for plotting
+        for i, n_rate in enumerate(n_rates):
+            plot_data_ghg.append({
+                "Crop": crop,
+                "N Rate (kg N/ha)": n_rate,
+                "Gross Margin ($/ha)": gm[i],
+                "GHG Price Scenario": scenario
+            })
+ghg_plot_df = pd.DataFrame(plot_data_ghg)
+
+
+# Plot results
+plot_dynamic_line_graph(
+    data=ghg_plot_df,
+    x_var="N Rate (kg N/ha)",
+    y_var="Gross Margin ($/ha)",
+    line_category="GHG Price Scenario",
+    subplot_category="Crop",
+    title_prefix="GM Response for"
+)
+
+
+print("RiskWise.py has been executed successfully.")
+
+
+
 

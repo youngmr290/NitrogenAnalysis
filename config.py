@@ -9,6 +9,13 @@ nitrogen_price = {
     "High": 1200 * 1.3
 }
 
+# Define carbon price scenarios ($ per tonne CO2e)
+carbon_price_scenarios = {
+    "Low": 10,
+    "Standard": 30,
+    "High": 100
+}
+
 # Grain Price and Quality Standards
 grain_prices = {
     "Wheat": {"APW": {"Price": 375, "Protein Requirement": 10.5, "Max Screenings": 5},
