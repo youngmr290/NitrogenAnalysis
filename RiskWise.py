@@ -533,12 +533,14 @@ df_current_yr = df[df['Year'] == YEAR] #update df_current to include the gm calc
 ## ---------------------------------
 ## A.1 General Graphs
 ## ---------------------------------
+#TODO For 2025 this will have rotation on the x axis.
 if GENERAL_GRAPHS:
     f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Current Land Use", z=None)
     f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Previous Land Use", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="Protein (%)", x="Previous Land Use", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="Screenings (%)", x="Previous Land Use", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="NUE (yield Nf)", x="Previous Land Use", z="Current Land Use")
+    f_plot_y_by_x_and_z(df_current_yr, y="Total available soil N (kg/ha)", x="Current Land Use", z=None)
 
 ## ---------------------------------
 ## A.2 GM results
@@ -546,7 +548,9 @@ if GENERAL_GRAPHS:
 
 # create a pivot table - only show current yr
 pivot_table = round(df_current_yr.pivot_table(index=["Rotation", "Current Land Use"], columns="Treatment", values="Gross Margin ($/ha)", aggfunc="mean"),0)
+print("Gross Margin ($/ha) by Treatment")
 print(pivot_table)
+pivot_table.to_excel(f"Output/GM_{YEAR}.xlsx", index=False)
 
 # plot gm by n and rot
 # f_plot_y_by_x_and_z(df_current_yr, y="Gross Margin ($/ha)", x="Previous Land Use", z="Current Land Use")
@@ -574,7 +578,7 @@ df_summary = df_summary[["Rotation", "Crop", "H", "L", "N"]]
 
 # Display the formatted table
 print(df_summary)
-df_summary.to_excel("Output/emissions_summary.xlsx", index=False)
+df_summary.to_excel(f"Output/emissions_summary_{YEAR}.xlsx", index=False)
 
 
 # ---------------------------------
@@ -621,7 +625,7 @@ def yield_response(n_rate, a, b, c):
     return a + b * n_rate + c * n_rate**2
 
 # Generalized function to fit yield response model based on dynamic filters
-def fit_yield_models(df, filter_conditions, plot=False):
+def fit_yield_models(df, filter_conditions, plot=False, subplot_ax=None, crop_label=""):
     """
     Fits quadratic yield response models based on dynamic filtering conditions.
 
@@ -667,40 +671,37 @@ def fit_yield_models(df, filter_conditions, plot=False):
         r_squared = 1 - (ss_res / ss_tot)
         
         # If plot flag is True, generate the graph
-        if plot:
-            plt.figure(figsize=(8, 6))
-            
-            # Scatter plot of raw data points
-            plt.scatter(x_data, y_data, color='gray', alpha=0.5, label="Raw Data")
-            
-            # Generate smooth x values for plotting
+        if plot and subplot_ax:
+            ax = subplot_ax
+
+            ax.scatter(x_data, y_data, color='gray', alpha=0.5, label="Raw Data")
             x_fit = np.linspace(x_data.min(), x_data.max(), 100)
             y_fit = yield_response(x_fit, *popt)
-            
-            # Plot fitted quadratic curve
-            plt.plot(x_fit, y_fit, color='black', linestyle="--", label=f"Fitted Quadratic (R²={r_squared:.2f})")
-            
-            # Formatting
-            plt.xlabel("N Rate (kg N/ha)")
-            plt.ylabel("Yield (t/ha)")
-            plt.title("Quadratic Yield Response Fit")
-            plt.legend()
-            plt.grid(True, linestyle="--", alpha=0.6)
-            
-            # Remove top and right borders
-            ax = plt.gca()
+            ax.plot(x_fit, y_fit, color='black', linestyle="--", label=f"Fit (R²={r_squared:.2f})")
+
+            ax.set_title(f"{crop_label}")
+            ax.set_xlabel("N Rate (kg N/ha)")
+            ax.set_ylabel("Yield (t/ha)")
+            ax.grid(True, linestyle="--", alpha=0.6)
+            ax.legend()
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-    
-            plt.show()
         return popt
     except Exception as e:
         return f"Error fitting model: {e}"
 
-
 # Fit and graph yield response function for each crop
-for crop in ["Barley", "Wheat", "Canola"]:
-    fit_yield_models(df, {"Current Land Use": crop}, plot=True)  # Plot each crop's model
+# Create a single figure with 3 subplots
+fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+
+for i, crop in enumerate(["Barley", "Wheat", "Canola"]):
+    fit_yield_models(df, {"Current Land Use": crop}, plot=True, subplot_ax=axes[i], crop_label=crop)
+
+plt.tight_layout()
+plt.show()
+
+# for crop in ["Barley", "Wheat", "Canola"]:
+#     fit_yield_models(df, {"Current Land Use": crop}, plot=True)  # Plot each crop's model
 
 
 
@@ -755,22 +756,22 @@ pivot_table.to_excel("Output/GM.xlsx")
 filtered_data = df[df["Current Land Use"].isin(["Barley", "Wheat"])]
 
 # Use the function to generate boxplots for Barley
-# plot_boxplots(
-#     data=filtered_data, 
-#     crop="Barley", 
-#     x_var="N Rate (kg N/ha)", 
-#     y_vars=["Screenings (%)", "Protein (%)"], 
-#     hue_var="GS rainfall decile"
-# )
+plot_boxplots(
+    data=filtered_data, 
+    crop="Barley", 
+    x_var="N Rate (kg N/ha)", 
+    y_vars=["Screenings (%)", "Protein (%)"], 
+    hue_var="GS rainfall decile"
+)
 
 # Use the function to generate boxplots for Wheat
-# plot_boxplots(
-#     data=filtered_data, 
-#     crop="Wheat", 
-#     x_var="N Rate (kg N/ha)", 
-#     y_vars=["Screenings (%)", "Protein (%)"], 
-#     hue_var="GS rainfall decile"
-# )
+plot_boxplots(
+    data=filtered_data, 
+    crop="Wheat", 
+    x_var="N Rate (kg N/ha)", 
+    y_vars=["Screenings (%)", "Protein (%)"], 
+    hue_var="GS rainfall decile"
+)
 
 
 
