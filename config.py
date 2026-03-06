@@ -39,7 +39,7 @@ variable_costs = {
 
 # ghg emissions
 emission_farm_specific = {
-    "N_MacroPro": 10, #10 kg/ha of N come from MacroPro for each crop.
+    "N_MacroPro": 10, #N that doesnt come from urea ie 10 kg/ha of N come from MacroPro for each crop.
     "lime_applied": 500, #assuming 2t/ha every 4 years
     "diesel_used": 17, #assume 17L/ha for all crops
     "harvest_index": {"Wheat": 0.42, "Barley": 0.44, "Canola": 0.2, "Lupin": 0.3}, #harvest index for each crop

@@ -14,7 +14,7 @@ from config import nitrogen_price, grain_prices, variable_costs, emission_coeffi
 # ==========================
 # User Controls
 # ==========================
-YEAR = 2024
+YEAR = 2025
 GENERAL_GRAPHS = False
 CAN_LEACH = True #Does your crop get enough rainfall or irrigation to drain through the soil profile, i.e. typically above 600mm
 
@@ -31,6 +31,10 @@ relative_path = "DataMaster.xlsx"  # Adjust based on the file's location relativ
 # Construct the full file path and read the Excel file
 file_path = os.path.join(script_dir, relative_path)
 df = pd.read_excel(file_path)
+missing_yield_rows = df["Yield (t/ha)"].isna().sum()
+if missing_yield_rows > 0:
+    print(f"Dropping {missing_yield_rows} rows with missing Yield (t/ha)")
+df = df[df["Yield (t/ha)"].notna()].copy()
 
 # Filter the data for the specified year
 df_current_yr = df[df['Year'] == YEAR]
@@ -588,30 +592,53 @@ df_summary.to_excel(f"Output/emissions_summary_{YEAR}.xlsx", index=False)
 ## ---------------------------------
 ## B.1 Statistical Analysis - examin statistical relationships between variables
 ## ---------------------------------
+# 1. Ordinal coding for ordered variables
+df['Time of break _ord'] = df['Time of break'].map({'Late': 0, 'Medium': 1, 'Early': 2})
+df['Quality of break _ord'] = df['Quality of break'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
+df['Spring rainfall decile _ord'] = df['Spring rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
 
-# Convert categorical variables to numeric codes for correlation analysis
-df['Time of break _dummy'] = df['Time of break'].map({'Late': 0, 'Medium': 1, 'Early': 2})
-df['Quality of break _dummy'] = df['Quality of break'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
-df['Spring rainfall decile _dummy'] = df['Spring rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
-df['GS rainfall decile _dummy'] = df['GS rainfall decile'].map({'Poor': 0, 'Medium': 1, 'Good': 2})
-df['Previous Land Use _dummy'] = pd.Categorical(df['Previous Land Use']).codes
-df['Current Land Use _dummy'] = pd.Categorical(df['Current Land Use']).codes
-
-# Correlation matrix between numeric variables
-correlation_matrix = df[['N Rate (kg N/ha)', 'Yield (t/ha)', 'Time of break _dummy', 'Quality of break _dummy', 'Spring rainfall decile _dummy', 'GS rainfall decile _dummy', 'Previous Land Use _dummy', 'Current Land Use _dummy']].corr()
+# 2. Correlation matrix
+# Only include truly numeric / ordinal variables here
+correlation_matrix = df[[
+    'N Rate (kg N/ha)',
+    'Yield (t/ha)',
+    'Time of break _ord',
+    'Quality of break _ord',
+    'Spring rainfall decile _ord'
+]].corr()
 
 print("Correlation Matrix:")
 print(correlation_matrix)
 
-# Perform Linear Regression to predict Protein and Screenings from other variables
-# Predictor variables (independent)
-X = df[['N Rate (kg N/ha)', 'Time of break _dummy', 'Quality of break _dummy', 'Spring rainfall decile _dummy', 'GS rainfall decile _dummy', 'Previous Land Use _dummy', 'Current Land Use _dummy']]
+# 3. Build regression predictors
+# Numeric / ordinal predictors
+X_num = df[[
+    'N Rate (kg N/ha)',
+    'Time of break _ord',
+    'Quality of break _ord',
+    'Spring rainfall decile _ord'
+]].copy()
 
-# Target variables (dependent)
+# Categorical predictors converted to proper dummy variables
+X_cat = pd.get_dummies(
+    df[['Previous Land Use', 'Current Land Use']],
+    # df[['2 Previous Land Use', 'Previous Land Use', 'Current Land Use']],
+    drop_first=True
+)
+
+# Combine predictors
+X = pd.concat([X_num, X_cat], axis=1)
+
+# Ensure all columns are numeric
+X = X.astype(float)
+
+# Add intercept
+X = sm.add_constant(X)
+
+# Target variable
 Y = df['Yield (t/ha)']
 
-# Fit linear regression model for yield v2
-X = sm.add_constant(X)
+# Fit linear regression model
 model = sm.OLS(Y, X).fit()
 print(model.summary())
 
@@ -657,6 +684,11 @@ def fit_yield_models(df, filter_conditions, plot=False, subplot_ax=None, crop_la
     # Extract independent and dependent variables
     x_data = filtered_df["N Rate (kg N/ha)"]
     y_data = filtered_df["Yield (t/ha)"]
+    valid = pd.DataFrame({"x_data": x_data, "y_data": y_data}).replace([np.inf, -np.inf], np.nan).dropna()
+    x_data = valid["x_data"]
+    y_data = valid["y_data"]
+    if x_data.shape[0] < 3:
+        return "Not enough valid data points to fit the model."
 
     # Fit the quadratic model
     try:
@@ -744,7 +776,7 @@ difference_table = difference_table.fillna(0)
 # Formatting: Add the difference in brackets to the actual pivot_table
 for col in pivot_table.columns:
     if col in difference_table.columns:
-        pivot_table[col] = pivot_table[col].astype(str) + " (" + difference_table[col].astype(int).astype(str) + ")"
+        pivot_table[col] = pivot_table[col].astype(int).astype(str) + " (" + difference_table[col].astype(int).astype(str) + ")"
 
 
 # Reset index for better formatting
@@ -1032,7 +1064,7 @@ for crop in crops:
     
     # calc GHG 
     # all the nitrgen is urea except the nitrogen from MacroPro which is ammonium.
-    propn_urea = (n_rates - emission_farm_specific["N_MacroPro"])/ n_rates
+    propn_urea = propn_urea = np.where(n_rates == 0, 0, (n_rates - emission_farm_specific["N_MacroPro"]) / n_rates)
 
     # calculate residue left after harvest
     total_biomass = pred_yield / emission_farm_specific["harvest_index"][crop]
