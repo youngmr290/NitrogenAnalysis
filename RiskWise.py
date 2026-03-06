@@ -533,14 +533,14 @@ df_current_yr = df[df['Year'] == YEAR] #update df_current to include the gm calc
 ## ---------------------------------
 ## A.1 General Graphs
 ## ---------------------------------
-#TODO For 2026 this will have rotation on the x axis.
 if GENERAL_GRAPHS:
     f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Current Land Use", z=None)
+    f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Rotation", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Previous Land Use", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="Protein (%)", x="Previous Land Use", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="Screenings (%)", x="Previous Land Use", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="NUE (yield Nf)", x="Previous Land Use", z="Current Land Use")
-    f_plot_y_by_x_and_z(df_current_yr, y="Total available soil N (kg/ha)", x="Current Land Use", z=None)
+    f_plot_y_by_x_and_z(df_current_yr, y="Total available soil N (kg/ha)", x="Previous Land Use", z="Current Land Use")
 
 ## ---------------------------------
 ## A.2 GM results
