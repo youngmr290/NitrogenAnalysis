@@ -101,7 +101,7 @@ def f_plot_y_by_x_and_z(df, y="Yield (t/ha)", x="Previous Land Use", z=None):
         else:
             subset = df[df[z] == subplot_category]  # Filter data per subplot
             ax.set_title(subplot_category)  # Title per subplot
-        sns.barplot(data=subset, x=x, y=y, hue="Treatment", hue_order=treatment_order, palette=colors, ax=ax, edgecolor='black', errorbar="sd", errwidth=1, capsize=0.1)
+        sns.barplot(data=subset, x=x, y=y, hue="Treatment", hue_order=treatment_order, palette=colors, ax=ax, edgecolor='black', errorbar="sd", capsize=0.1, err_kws={'linewidth': 1})
 
         ax.set_xlabel(x)  # X-axis label
         ax.set_ylabel(y)  # Y-axis label (shared)
@@ -533,7 +533,7 @@ df_current_yr = df[df['Year'] == YEAR] #update df_current to include the gm calc
 ## ---------------------------------
 ## A.1 General Graphs
 ## ---------------------------------
-#TODO For 2025 this will have rotation on the x axis.
+#TODO For 2026 this will have rotation on the x axis.
 if GENERAL_GRAPHS:
     f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Current Land Use", z=None)
     f_plot_y_by_x_and_z(df_current_yr, y="Yield (t/ha)", x="Previous Land Use", z="Current Land Use")
