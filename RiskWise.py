@@ -15,7 +15,7 @@ from config import nitrogen_price, grain_prices, variable_costs, emission_coeffi
 # User Controls
 # ==========================
 YEAR = 2025
-GENERAL_GRAPHS = False
+GENERAL_GRAPHS = True
 CAN_LEACH = True #Does your crop get enough rainfall or irrigation to drain through the soil profile, i.e. typically above 600mm
 
 # ==========================
@@ -544,7 +544,8 @@ if GENERAL_GRAPHS:
     f_plot_y_by_x_and_z(df_current_yr, y="Protein (%)", x="Previous Land Use", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="Screenings (%)", x="Previous Land Use", z="Current Land Use")
     f_plot_y_by_x_and_z(df_current_yr, y="NUE (yield Nf)", x="Previous Land Use", z="Current Land Use")
-    f_plot_y_by_x_and_z(df_current_yr, y="Total available soil N (kg/ha)", x="Previous Land Use", z="Current Land Use")
+    f_plot_y_by_x_and_z(df_current_yr, y="Pre-seed Total available soil N 0-90cm (kg/ha)", x="Previous Land Use", z="Current Land Use")
+    f_plot_y_by_x_and_z(df_current_yr, y="Post-harv Total available soil N 0-90cm (kg/ha)", x="Previous Land Use", z="Current Land Use")
 
 ## ---------------------------------
 ## A.2 GM results
