@@ -4,6 +4,7 @@
 
 # Nitrogen Price Scenarios
 nitrogen_price = {
+    "Low": 1200 * 0.7,
     "Standard": 1200 ,
     "High": 1200*1.4,
     "V High": 1200 * 1.8
