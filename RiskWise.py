@@ -15,7 +15,7 @@ from config import nitrogen_price, grain_prices, variable_costs, emission_coeffi
 # User Controls
 # ==========================
 YEAR = 2025
-GENERAL_GRAPHS = True
+GENERAL_GRAPHS = False
 CAN_LEACH = True #Does your crop get enough rainfall or irrigation to drain through the soil profile, i.e. typically above 600mm
 
 # ==========================
@@ -214,6 +214,9 @@ def plot_dynamic_line_graph(data, x_var, y_var, line_category, subplot_category,
         # Iterate over unique line categories (e.g., N Price Scenarios)
         for i, line_value in enumerate(unique_lines):
             line_data = subset[subset[line_category] == line_value]
+
+            if line_data.empty or line_data[y_var].dropna().empty:
+                continue
 
             # Plot the line with dynamically assigned colors
             sns.lineplot(data=line_data, x=x_var, y=y_var, label=line_value, ax=ax, color=colors[i])
@@ -902,6 +905,9 @@ def compute_gm_and_profit_loss(crops, n_rates, scenario_dict, scenario_type):
     plot_data = []
 
     for crop in crops:
+        if crop not in yield_models:
+            print(f"No yield model for {crop}, skipping")
+            continue
         crop_data = df[df["Current Land Use"] == crop]
         a, b, c = yield_models[crop]  # Get yield response function parameters
         standard_grain_price = crop_data["Grain Price ($/t)"].mean()
@@ -1054,7 +1060,12 @@ plot_data_ghg = []
 
 for crop in crops:
     # Fit yield response function for each crop
-    a, b, c = fit_yield_models(df, {"Current Land Use": crop})  # get model parameters
+    params = fit_yield_models(df, {"Current Land Use": crop})
+    if isinstance(params, (list, np.ndarray)) and len(params) == 3:
+        a, b, c = params
+    else:
+        print(f"Skipping GHG for {crop}: {params}")
+        continue
     crop_data = df[df["Current Land Use"] == crop]
     standard_grain_price = crop_data["Grain Price ($/t)"].mean()
     variable_cost = variable_costs[crop]["Total"]
@@ -1103,6 +1114,133 @@ plot_dynamic_line_graph(
 
 
 print("RiskWise.py has been executed successfully.")
+
+
+# ==========================
+# NEW: GM Response Analysis
+# ==========================
+#this only works if Barely and Wheat is converted to cereal in the inputs.
+# Combine Barley and Wheat into Cereal for the new analysis
+df["Current Land Use"] = df["Current Land Use"].replace({"Barley": "Cereal", "Wheat": "Cereal"})
+
+# Define crops for analysis (Cereal combines Barley and Wheat)
+crops = ["Cereal", "Canola", "Lupin"]
+n_rates = np.linspace(0, max(df["N Rate (kg N/ha)"]), 100)
+
+# 1. GM response for Cereal, Canola and Lupins at different N prices
+print("\n1. GM Response at Different N Prices for Cereal, Canola, Lupins")
+
+yield_models_n_price = {}
+plot_data_n_price = []
+
+for crop in crops:
+    try:
+        crop_data = df[df["Current Land Use"] == crop]
+        
+        if crop == "Lupin":
+            # Special handling for Lupins: no quadratic fit, use average yield and N rate
+            if crop_data.shape[0] == 0:
+                print(f"Skipping {crop}: No data")
+                continue
+            average_yield = crop_data["Yield (t/ha)"].mean()
+            average_n = crop_data["N Rate (kg N/ha)"].mean()
+            standard_grain_price = crop_data["Grain Price ($/t)"].mean()
+            variable_cost = variable_costs.get(crop, {"Total": 0})["Total"]
+            
+            for scenario, n_price in nitrogen_price.items():
+                gm = average_yield * standard_grain_price - (average_n * (n_price / 1000) + variable_cost)
+                plot_data_n_price.append({
+                    "Crop": crop,
+                    "N Rate (kg N/ha)": average_n,
+                    "Gross Margin ($/ha)": gm,
+                    "N Price Scenario": scenario
+                })
+            continue  # Skip the normal fitting
+        
+        # Normal fitting for other crops
+        model_params = fit_yield_models(df, {"Current Land Use": crop})
+        
+        if isinstance(model_params, str):  # Error message
+            print(f"Skipping {crop}: {model_params}")
+            continue
+        yield_models_n_price[crop] = model_params
+        
+        # Get crop data for prices
+        standard_grain_price = crop_data["Grain Price ($/t)"].mean()
+        variable_cost = variable_costs.get(crop if crop != "Cereal" else "Barley", {"Total": 0})["Total"]  # Use Barley costs for Cereal
+        
+        for scenario, n_price in nitrogen_price.items():
+            gm_values = calculate_gm(n_rates, *model_params, standard_grain_price, variable_cost, n_price)
+            
+            for i, n_rate in enumerate(n_rates):
+                plot_data_n_price.append({
+                    "Crop": crop,
+                    "N Rate (kg N/ha)": n_rate,
+                    "Gross Margin ($/ha)": gm_values[i],
+                    "N Price Scenario": scenario
+                })
+    except Exception as e:
+        print(f"Error processing {crop}: {e}")
+
+# Plot for N price scenarios
+if plot_data_n_price:
+    plot_df_n_price = pd.DataFrame(plot_data_n_price)
+    plot_dynamic_line_graph(
+        data=plot_df_n_price,
+        x_var="N Rate (kg N/ha)",
+        y_var="Gross Margin ($/ha)",
+        line_category="N Price Scenario",
+        subplot_category="Crop",
+        title_prefix="GM Response at Different N Prices for"
+    )
+
+# 2. GM response for Cereal, Canola and Lupins, split by previous land use
+print("\n2. GM Response Split by Previous Land Use for Cereal, Canola, Lupins")
+
+yield_models_prev_land = {}
+plot_data_prev_land = []
+
+for crop in ["Cereal", "Canola"]:
+    try:
+        crop_df = df[df["Current Land Use"] == crop]
+        prev_lands = crop_df["Previous Land Use"].dropna().unique()
+        
+        for prev_land in prev_lands:
+            # Fit yield model for crop + previous land use
+            model_params = fit_yield_models(df, {"Current Land Use": crop, "Previous Land Use": prev_land})
+            
+            if isinstance(model_params, str):  # Error
+                continue
+            yield_models_prev_land[(crop, prev_land)] = model_params
+            
+            # Get crop data for prices (using standard)
+            standard_grain_price = crop_df["Grain Price ($/t)"].mean()
+            variable_cost = variable_costs.get(crop if crop != "Cereal" else "Barley", {"Total": 0})["Total"]
+            n_price = nitrogen_price["Standard"]
+            
+            gm_values = calculate_gm(n_rates, *model_params, standard_grain_price, variable_cost, n_price)
+            
+            for i, n_rate in enumerate(n_rates):
+                plot_data_prev_land.append({
+                    "Crop": crop,
+                    "N Rate (kg N/ha)": n_rate,
+                    "Gross Margin ($/ha)": gm_values[i],
+                    "Previous Land Use": prev_land
+                })
+    except Exception as e:
+        print(f"Error processing {crop}: {e}")
+
+# Plot for previous land use
+if plot_data_prev_land:
+    plot_df_prev_land = pd.DataFrame(plot_data_prev_land)
+    plot_dynamic_line_graph(
+        data=plot_df_prev_land,
+        x_var="N Rate (kg N/ha)",
+        y_var="Gross Margin ($/ha)",
+        line_category="Previous Land Use",
+        subplot_category="Crop",
+        title_prefix="GM Response by Previous Land Use for"
+    )
 
 
 

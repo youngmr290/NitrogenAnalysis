@@ -5,8 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="105ae2a9-f5c2-437a-b242-8a5fe1fa0e85" name="Changes" comment="fixes">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/DataMaster.xlsx" beforeDir="false" afterPath="$PROJECT_DIR$/DataMaster.xlsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/RiskWise.py" beforeDir="false" afterPath="$PROJECT_DIR$/RiskWise.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -27,15 +29,15 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.Main.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.RiskWise.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/young/Dropbox/Michael/Work-Uni-Coding/Youngs Farm Analysis/FOG/Work/R&amp;D/Stirlings to Coast/RiskWise/Analysis&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.Main.executor": "Debug",
+    "Python.RiskWise.executor": "Debug",
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "last_opened_file_path": "C:/Users/young/Dropbox/Michael/Work-Uni-Coding/Youngs Farm Analysis/FOG/Work/R&D/Stirlings to Coast/RiskWise/Analysis"
   }
-}</component>
+}]]></component>
   <component name="RunManager">
     <configuration name="RiskWise" type="PythonConfigurationType" factoryName="Python" singleton="false" nameIsGenerated="true">
       <module name="Analysis" />
@@ -133,39 +135,18 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/RiskWise.py</url>
-          <line>540</line>
-          <option name="timeStamp" value="1" />
+          <line>217</line>
+          <option name="timeStamp" value="17" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/RiskWise.py</url>
-          <line>97</line>
-          <option name="timeStamp" value="2" />
+          <line>1225</line>
+          <option name="timeStamp" value="18" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/RiskWise.py</url>
-          <line>643</line>
-          <option name="timeStamp" value="7" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/RiskWise.py</url>
-          <line>566</line>
-          <option name="timeStamp" value="8" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/RiskWise.py</url>
-          <line>525</line>
-          <option name="timeStamp" value="9" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/RiskWise.py</url>
-          <line>759</line>
-          <option name="timeStamp" value="10" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <condition expression="n_rates==0" language="Python" />
-          <url>file://$PROJECT_DIR$/RiskWise.py</url>
-          <line>1066</line>
-          <option name="timeStamp" value="11" />
+          <line>225</line>
+          <option name="timeStamp" value="19" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

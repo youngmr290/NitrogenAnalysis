@@ -4,9 +4,9 @@
 
 # Nitrogen Price Scenarios
 nitrogen_price = {
-    "Low": 1200 * 0.7,
-    "Standard": 1200,
-    "High": 1200 * 1.3
+    "Standard": 1200 ,
+    "High": 1200*1.4,
+    "V High": 1200 * 1.8
 }
 
 # Define carbon price scenarios ($ per tonne CO2e)
@@ -24,7 +24,8 @@ grain_prices = {
     "Canola": {"CAN1": {"Price": 595, "Protein Requirement": None, "Max Screenings": None}},
     "Barley": {"Malt": {"Price": 305, "Protein Requirement": 9, "Max Screenings": 7},
                "Feed": {"Price": 275, "Protein Requirement": 0, "Max Screenings": 60}},
-    "Lupin": {"Lup1": {"Price": 350, "Protein Requirement": None, "Max Screenings": None}}
+    "Lupin": {"Lup1": {"Price": 350, "Protein Requirement": None, "Max Screenings": None}},
+    "Cereal": {"Cer1": {"Price": 320, "Protein Requirement": None, "Max Screenings": None}}
 }
 
 # Variable Costs Excluding Nitrogen
@@ -32,6 +33,7 @@ variable_costs = {
     "Wheat": {"Total": 320.00},
     "Barley": {"Total": 320.00},
     "Oats": {"Total": 270.00},
+    "Cereal": {"Total": 320.00},
     "Canola": {"Total": 340.00},
     "Lupin": {"Total": 320.00}
 }
@@ -42,7 +44,7 @@ emission_farm_specific = {
     "N_MacroPro": 10, #N that doesnt come from urea ie 10 kg/ha of N come from MacroPro for each crop.
     "lime_applied": 500, #assuming 2t/ha every 4 years
     "diesel_used": 17, #assume 17L/ha for all crops
-    "harvest_index": {"Wheat": 0.42, "Barley": 0.44, "Canola": 0.2, "Lupin": 0.3}, #harvest index for each crop
+    "harvest_index": {'Cereal': 0.43, "Wheat": 0.42, "Barley": 0.44, "Canola": 0.2, "Lupin": 0.3}, #harvest index for each crop
     "F": 0.1, #fraction of crop residue that is burnt (ha burnt/ha harvested).
     "decay_before_burning": 0.25 #fraction of crop residue that is decayed before burning time.
 }    
@@ -78,7 +80,7 @@ emission_coefficients = {
     'i_CCa': 0.4,  # Carbon mass fraction in crop residue
     'i_NCa': 0.006,  # Nitrogen content of above-ground crop residue
     'i_NCb': 0.01,  # Nitrogen content of below-ground crop residue
-    'i_Rbg': {'Barley': 0.32, 'Wheat': 0.29, 'Canola': 0.33, 'Lupin': 0.51},  # Below ground-residue to above ground residue ratio
+    'i_Rbg': {'Cereal': 0.30, 'Barley': 0.32,'Wheat': 0.29, 'Canola': 0.33, 'Lupin': 0.51},  # Below ground-residue to above ground residue ratio
     
     # 🔹 Fraction of Nitrogen Available for Loss Processes
     'i_FracGASM_fert': 0.11,  # Fraction of fertilizer nitrogen volatilized as ammonia
